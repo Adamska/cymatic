@@ -2,7 +2,7 @@
   "name": "cymatic",
   "private": true,
   "version": "0.1.0",
-  "description": "SPECTRA - an interactive spatial audio and optical light laboratory with an AI scene director",
+  "description": "Cymatic - an interactive spatial audio and optical light laboratory with an AI scene director",
   "license": "MIT",
   "type": "module",
   "scripts": {

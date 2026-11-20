@@ -16,7 +16,7 @@ function readBody(request: IncomingMessage): Promise<string> {
 
 function directorDevApi(): Plugin {
   return {
-    name: 'spectra-director-dev-api',
+    name: 'cymatic-director-dev-api',
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use('/api/direct', (req, res) => {

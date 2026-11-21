@@ -3,6 +3,7 @@ import type { OpticKey, SceneDirective } from '../ai/directiveSchema'
 import { DEFAULT_DIRECTIVE } from '../ai/presets'
 import { directScene } from '../ai/sceneDirector'
 import { audioEngine, type AudioSourceKind } from '../audio/AudioEngine'
+import type { SampleTrack } from '../audio/sampleTracks'
 
 export type DirectiveOrigin = 'default' | 'model' | 'preset'
 
@@ -19,6 +20,7 @@ interface StudioState {
   selectSynth: () => void
   selectMicrophone: () => Promise<void>
   loadFile: (file: File) => Promise<void>
+  loadTrack: (track: SampleTrack) => Promise<void>
   setVolume: (volume: number) => void
   direct: (prompt: string) => Promise<void>
   tuneOptic: (key: OpticKey, value: number) => void
@@ -72,6 +74,18 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
       set({ engaged: true, source: 'file', trackName: file.name.replace(/\.[^.]+$/, ''), notice: null })
     } catch {
       set({ notice: 'That file could not be decoded.' })
+    }
+  },
+
+  loadTrack: async (track) => {
+    try {
+      const response = await fetch(track.url)
+      if (!response.ok) throw new Error(`Track request failed with ${response.status}`)
+      const blob = await response.blob()
+      await audioEngine.playFile(new File([blob], `${track.id}.mp3`, { type: blob.type || 'audio/mpeg' }))
+      set({ engaged: true, source: 'file', trackName: track.title, notice: null })
+    } catch {
+      set({ notice: 'The sample track could not be loaded.' })
     }
   },
 

@@ -1,5 +1,6 @@
 import { AmbientSynth, type SynthPatch } from './AmbientSynth'
 import { BandTracker, type AudioBands } from './BandTracker'
+import { SpectrumGate } from './SpectrumGate'
 
 export type AudioSourceKind = 'synth' | 'file' | 'microphone'
 
@@ -28,8 +29,10 @@ const DEFAULT_PATCH: SynthPatch = {
 export class AudioEngine {
   readonly spectrum = new Uint8Array(FFT_SIZE / 2)
 
-  private readonly waveform = new Uint8Array(FFT_SIZE)
+  private readonly spectrumDb = new Float32Array(FFT_SIZE / 2)
+  private readonly waveform = new Float32Array(FFT_SIZE)
   private readonly tracker = new BandTracker()
+  private readonly gate = new SpectrumGate(FFT_SIZE / 2)
   private graph: AudioGraph | null = null
   private fileNode: AudioBufferSourceNode | null = null
   private microphoneNode: MediaStreamAudioSourceNode | null = null
@@ -41,8 +44,16 @@ export class AudioEngine {
     return this.tracker.bands
   }
 
+  get gainDb(): number {
+    return this.tracker.gainDb
+  }
+
   get sampleRate(): number {
     return this.graph?.context.sampleRate ?? 48000
+  }
+
+  get binHz(): number {
+    return this.sampleRate / FFT_SIZE
   }
 
   async engage(): Promise<void> {
@@ -52,6 +63,7 @@ export class AudioEngine {
 
   useSynth(): void {
     this.releaseExternalSources()
+    this.recalibrate()
     this.fadeSynth(1)
   }
 
@@ -59,6 +71,7 @@ export class AudioEngine {
     const { context, bus } = await this.ensureGraph()
     const buffer = await context.decodeAudioData(await file.arrayBuffer())
     this.releaseExternalSources()
+    this.recalibrate()
     this.fadeSynth(0)
     const node = context.createBufferSource()
     node.buffer = buffer
@@ -71,9 +84,10 @@ export class AudioEngine {
   async useMicrophone(): Promise<void> {
     const { context, analyser } = await this.ensureGraph()
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
     })
     this.releaseExternalSources()
+    this.recalibrate()
     this.fadeSynth(0)
     this.microphoneStream = stream
     this.microphoneNode = context.createMediaStreamSource(stream)
@@ -92,9 +106,11 @@ export class AudioEngine {
 
   update(delta: number): void {
     if (!this.graph) return
-    this.graph.analyser.getByteFrequencyData(this.spectrum)
-    this.graph.analyser.getByteTimeDomainData(this.waveform)
-    this.tracker.update(this.spectrum, this.waveform, this.sampleRate / FFT_SIZE, delta)
+    const { spectrumDb, waveform, tracker } = this
+    this.graph.analyser.getFloatFrequencyData(spectrumDb)
+    this.graph.analyser.getFloatTimeDomainData(waveform)
+    tracker.update(spectrumDb, waveform, this.binHz, delta)
+    this.gate.apply(spectrumDb, tracker.gainDb, delta, this.spectrum)
   }
 
   dispose(): void {
@@ -108,6 +124,7 @@ export class AudioEngine {
     }
     this.spectrum.fill(0)
     this.tracker.reset()
+    this.gate.reset()
   }
 
   private async ensureGraph(): Promise<AudioGraph> {
@@ -147,6 +164,11 @@ export class AudioEngine {
     synth.output.connect(synthGain).connect(bus)
 
     return { context, analyser, bus, limiter, master, synth, synthGain }
+  }
+
+  private recalibrate(): void {
+    this.tracker.recalibrate()
+    this.gate.reset()
   }
 
   private fadeSynth(level: number): void {

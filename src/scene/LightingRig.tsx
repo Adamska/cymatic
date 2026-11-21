@@ -66,7 +66,7 @@ function StudioPanels() {
     tint(keyPanel.current, lights.key, level * (2.6 + bands.rms * 1.6))
     tint(fillPanel.current, lights.fill, level * (2 + bands.mid * 1.6))
     tint(rimPanel.current, lights.rim, level * (2.4 + bands.high * 3))
-    tint(halo.current, blend.copy(lights.key).lerp(lights.rim, 0.5), level * (1.2 + bands.transient * 4))
+    tint(halo.current, blend.copy(lights.key).lerp(lights.rim, 0.5), level * (1.2 + Math.max(bands.transient, bands.impact) * 4))
   })
 
   return (

@@ -8,7 +8,7 @@ An interactive spatial audio and optical light laboratory. A displaced glass scu
 
 - **One click to sound and light.** `[ ENGAGE ENGINE ]` starts a procedural ambient synthesizer: sub-bass drone, detuned saw pads, an LFO-swept resonant low-pass filter, a pulsing sub envelope and a convolution reverb. No assets are downloaded.
 - **Any source.** Drop an MP3, WAV or OGG anywhere on the page, or switch to the live microphone. The microphone feeds the analyser only and is never routed to the speakers.
-- **Custom optics.** The sculpture is a single `ShaderMaterial`. The vertex stage displaces a welded icosphere with curl-warped simplex noise and rebuilds normals by finite differences. The fragment stage combines Inigo Quilez cosine palettes, thin-film interference, wrapped diffuse lighting, back-scattered translucency and reflections of an animated Lightformer studio.
+- **Custom optics.** The sculpture is a single `ShaderMaterial`. The vertex stage displaces a welded icosphere with curl-warped simplex noise and rebuilds normals by finite differences. Bass swells the whole form into broad lobes, mids twist it into spiralling folds and highs raise sharp, fast ripples, each through a spring with its own weight and inertia, so the form carries momentum after the sound stops. Kicks punch the swell, hi-hats flick the ripples and any sudden jump in loudness gives the whole form a short impulse before it settles back within a second. The live spectrum is also wrapped around the surface by latitude, low frequencies at the equator and highs toward the poles, and each lifted band glows in its own palette color. A slow leveller shared by every band brings a quiet microphone up to the range of a mastered track while keeping the balance between lows and highs and the difference between soft and loud passages, and a tracked noise floor keeps room hiss from moving the form. The fragment stage combines Inigo Quilez cosine palettes, thin-film interference, wrapped diffuse lighting, back-scattered translucency and reflections of an animated Lightformer studio.
 - **AI scene director.** Describe a light and a sound in the command bar, and a Zod-validated `SceneDirective` drives the palette, lights, bloom, turbulence and synth patch. Every parameter glides to its new value.
 - **Never offline.** Without an `OPENAI_API_KEY`, or when the endpoint is unreachable, prompts are resolved by a deterministic semantic matcher that scores, blends and modifies a library of hand-tuned cues.
 
@@ -46,9 +46,10 @@ src/
   audio/
     AudioEngine.ts          Audio graph, sources, analyser, lifecycle
     AmbientSynth.ts         Procedural synthesizer voice graph
-    BandTracker.ts          FFT bands, RMS and bass transient detection
+    BandTracker.ts          Band energies in decibels, shared leveller, noise floors, kick and hi-hat onsets
+    SpectrumGate.ts         Leveled, noise-gated byte spectrum for the visuals
   shaders/
-    opticalCore.vert        Curl-warped simplex displacement, finite-difference normals
+    opticalCore.vert        Three-octave simplex displacement (lobes, folds, ripples), finite-difference normals
     opticalCore.frag        Cosine palette, thin film, scattering, light rig, reflections
     atmosphere.vert|frag    Backdrop gradient and volumetric halo
   scene/
@@ -58,6 +59,8 @@ src/
     LightingRig.tsx         Spot and point lights, animated Lightformer environment
     PostProcessingStack.tsx HDR bloom, chromatic aberration, tone mapping, vignette, grain
     sceneState.ts           Mutable target and live scene values with damping
+    motionState.ts          Inertial response per band: springs, sustain, drift and spin
+    spectrumField.ts        Smoothed log-frequency spectrum texture mapped onto the sculpture
   ai/
     directiveSchema.ts      SceneDirectiveSchema and parameter ranges
     presets.ts              Hand-tuned directives, keywords and prompt chips
@@ -78,7 +81,8 @@ prompt -> /api/direct -> SceneDirective -> Zustand store
                                              |-> sceneState target -> damped every frame -> uniforms, lights, effects
                                              '-> AudioEngine.applyPatch -> AudioParam glides
 
-audio source -> AnalyserNode -> BandTracker -> uniforms, lights, particles, effects
+audio source -> AnalyserNode -> BandTracker -> lights, particles, effects
+                                   '-> motionState (springs, sustain, momentum) -> displacement, drift, spin
 ```
 
 React state changes only when the user acts. The render loop never touches React or Zustand: `Stage` advances the audio analysis and scene damping once per frame, and every `useFrame` callback reads those mutable values directly. The spectrum canvas runs its own `requestAnimationFrame` loop on the same analyser data.

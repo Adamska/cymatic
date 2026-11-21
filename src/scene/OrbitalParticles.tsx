@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import { Color, Matrix4, type InstancedMesh } from 'three'
 import { audioEngine } from '../audio/AudioEngine'
+import { motion } from './motionState'
 import { samplePalette, sceneLive } from './sceneState'
 
 interface Orbit {
@@ -43,10 +44,12 @@ export function OrbitalParticles() {
     const mesh = meshRef.current
     if (!mesh) return
 
-    const { bands, spectrum } = audioEngine
+    const { spectrum } = audioEngine
     const { matrix, color } = scratch
     const time = sceneLive.time
-    const swell = 1 + bands.bass * 0.1 + bands.transient * 0.08
+    const swell = 1 + motion.low * 0.16 + motion.pulse * 0.12
+    const flutter = Math.max(0, motion.high) * 0.1
+    const shimmer = motion.phase.z * 2.3
 
     for (let index = 0; index < PARTICLE_COUNT; index++) {
       const orbit = orbits[index]
@@ -54,7 +57,7 @@ export function OrbitalParticles() {
 
       const level = (spectrum[orbit.bin] ?? 0) / 255
       const angle = orbit.phase + time * orbit.speed
-      const radius = orbit.radius * swell
+      const radius = orbit.radius * (swell + flutter * Math.sin(orbit.phase * 13 + shimmer))
       const planarX = Math.cos(angle) * radius
       const planarZ = Math.sin(angle) * radius
       const tiltedZ = planarZ * Math.cos(orbit.inclination)

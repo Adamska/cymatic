@@ -36,6 +36,8 @@ uniform SpotLight spotLights[NUM_SPOT_LIGHTS];
 varying vec3 vViewPosition;
 varying vec3 vViewNormal;
 varying float vHeight;
+varying float vSpectrum;
+varying float vFrequency;
 
 const float TAU = 6.28318530718;
 const float FILM_IOR = 1.38;
@@ -129,6 +131,7 @@ void main() {
   color += (specular + environment * reflectance * mix(0.6, 1.0, occlusion)) * sheen;
   color += film * fresnel * uIridescence * (0.3 + uHigh * 0.8);
   color += glow * crest * (uRms * 0.7 + uBass * 0.25);
+  color += palette(0.15 + vFrequency * 0.7 + uTime * 0.01) * pow(max(vSpectrum, 0.0), 2.2) * (0.12 + fresnel * 0.5);
 
   gl_FragColor = vec4(color, 1.0);
 

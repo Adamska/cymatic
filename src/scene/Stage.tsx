@@ -4,9 +4,10 @@ import { useEffect } from 'react'
 import { audioEngine } from '../audio/AudioEngine'
 import { Atmosphere } from './Atmosphere'
 import { LightingRig } from './LightingRig'
+import { motion, stepMotion } from './motionState'
 import { PostProcessingStack } from './PostProcessingStack'
 import { SculptureCore } from './SculptureCore'
-import { setSceneTarget, stepScene, type SceneLook } from './sceneState'
+import { sceneLive, setSceneTarget, stepScene, type SceneLook } from './sceneState'
 
 const MAX_FRAME_DELTA = 0.1
 
@@ -14,7 +15,8 @@ function FrameDriver() {
   useFrame((_, delta) => {
     const step = Math.min(delta, MAX_FRAME_DELTA)
     audioEngine.update(step)
-    stepScene(step, audioEngine.bands.rms)
+    stepMotion(step, audioEngine.bands, sceneLive.scalars.flow)
+    stepScene(step, motion.charge)
   }, -1)
   return null
 }

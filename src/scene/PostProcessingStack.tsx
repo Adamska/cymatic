@@ -21,7 +21,7 @@ export function PostProcessingStack() {
       bloom.current.intensity = scalars.bloom * (0.85 + bands.rms * 0.5)
     }
     if (aberration.current) {
-      const spread = (RESTING_ABERRATION + bands.transient * TRANSIENT_ABERRATION) * (0.35 + scalars.aberration * 1.65)
+      const spread = (RESTING_ABERRATION + Math.max(bands.transient, bands.impact) * TRANSIENT_ABERRATION) * (0.35 + scalars.aberration * 1.65)
       aberration.current.offset.set(spread, spread * 0.6)
     }
   })

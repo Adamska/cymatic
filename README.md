@@ -4,7 +4,7 @@ An interactive spatial audio and optical light laboratory. A displaced glass scu
 
 **Live demo: [cymatic-ten.vercel.app](https://cymatic-ten.vercel.app/)**
 
-![Cymatic rendering the Violet Nebula cue](<img width="640" height="400" alt="cymatic-demo" src="https://github.com/user-attachments/assets/20f3c3ad-eaa5-425a-b0a6-9f6da5dfb6fe" />)
+https://github.com/user-attachments/assets/20f3c3ad-eaa5-425a-b0a6-9f6da5dfb6fe
 
 ## Highlights
 

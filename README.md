@@ -4,7 +4,7 @@ An interactive spatial audio and optical light laboratory. A displaced glass scu
 
 **Live demo: [cymatic-ten.vercel.app](https://cymatic-ten.vercel.app/)**
 
-https://github.com/user-attachments/assets/20f3c3ad-eaa5-425a-b0a6-9f6da5dfb6fe
+![Cymatic playing a music file and changing theme](https://github.com/user-attachments/assets/20f3c3ad-eaa5-425a-b0a6-9f6da5dfb6fe)
 
 ## Highlights
 

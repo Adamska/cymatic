@@ -2,6 +2,8 @@
 
 An interactive spatial audio and optical light laboratory. A displaced glass sculpture sits inside a three-point light rig and reacts to sound in real time, while an AI scene director turns a sentence into a complete lighting cue and synthesizer patch.
 
+**Live demo: [cymatic-ten.vercel.app](https://cymatic-ten.vercel.app/)**
+
 ![Cymatic rendering the Violet Nebula cue](docs/preview.jpg)
 
 ## Highlights

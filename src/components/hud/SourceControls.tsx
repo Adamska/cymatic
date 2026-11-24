@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
+import { useCallback, useRef, type ChangeEvent, type CSSProperties } from 'react'
 import type { AudioSourceKind } from '../../audio/AudioEngine'
 import { useStudioStore } from '../../store/useStudioStore'
+import { useUiStore } from '../../store/useUiStore'
 import { GlassPanel } from './GlassPanel'
 import { TrackMenu } from './TrackMenu'
 
@@ -8,22 +9,29 @@ const SOURCES: readonly { kind: AudioSourceKind; label: string }[] = [
   { kind: 'synth', label: 'Synth' },
   { kind: 'microphone', label: 'Mic' },
   { kind: 'file', label: 'File' },
+  { kind: 'tab', label: 'Tab' },
 ]
+
+const canShareTab = typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function' && !window.matchMedia('(pointer: coarse)').matches
 
 export function SourceControls() {
   const fileInput = useRef<HTMLInputElement>(null)
   const anchor = useRef<HTMLDivElement>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const closeMenu = useCallback(() => setMenuOpen(false), [])
+  const menuOpen = useUiStore((state) => state.panel === 'tracks')
+  const openPanel = useUiStore((state) => state.openPanel)
+  const closeMenu = useCallback(() => {
+    if (useUiStore.getState().panel === 'tracks') openPanel(null)
+  }, [openPanel])
   const engaged = useStudioStore((state) => state.engaged)
   const source = useStudioStore((state) => state.source)
   const volume = useStudioStore((state) => state.volume)
-  const { engage, selectSynth, selectMicrophone, loadFile, setVolume } = useStudioStore.getState()
+  const { engage, selectSynth, selectMicrophone, selectTab, loadFile, setVolume } = useStudioStore.getState()
 
   const choose = (kind: AudioSourceKind) => {
-    setMenuOpen(kind === 'file' && !menuOpen)
-    if (kind === 'file') return
+    if (kind === 'file') return openPanel(menuOpen ? null : 'tracks')
+    closeMenu()
     if (kind === 'microphone') void selectMicrophone()
+    else if (kind === 'tab') void selectTab()
     else if (engaged) selectSynth()
     else void engage()
   }
@@ -38,7 +46,7 @@ export function SourceControls() {
     <div ref={anchor} className="pointer-events-auto relative">
       <GlassPanel className="flex h-9 items-center gap-1 rounded-full px-1.5">
         <div className="flex items-center" role="radiogroup" aria-label="Audio source">
-          {SOURCES.map(({ kind, label }) => {
+          {SOURCES.filter(({ kind }) => kind !== 'tab' || canShareTab).map(({ kind, label }) => {
             const selected = engaged && source === kind
             const active = selected || (kind === 'file' && menuOpen)
             return (

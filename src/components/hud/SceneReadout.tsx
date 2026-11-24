@@ -1,9 +1,14 @@
 import { useStudioStore, type DirectiveOrigin } from '../../store/useStudioStore'
+import { CueHistory } from './CueHistory'
 
 const ORIGIN_LABELS: Record<DirectiveOrigin, string> = {
   default: 'Opening cue',
   model: 'AI director',
   preset: 'Preset library',
+  shared: 'Shared cue',
+  auto: 'Auto director',
+  history: 'Cue history',
+  morph: 'Morph',
 }
 
 export function SceneReadout() {
@@ -19,6 +24,7 @@ export function SceneReadout() {
         <h2 className="mt-1.5 truncate text-xl font-light tracking-tight text-white/95">{title}</h2>
         <p className="mt-1.5 line-clamp-3 hidden text-[0.8rem] leading-relaxed font-light text-white/50 sm:block">{note}</p>
       </div>
+      <CueHistory />
     </section>
   )
 }

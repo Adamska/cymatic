@@ -16,11 +16,10 @@ interface Orbit {
   tone: number
 }
 
-const PARTICLE_COUNT = 520
 const HIGHEST_BIN = 680
 
-function createOrbits(): Orbit[] {
-  return Array.from({ length: PARTICLE_COUNT }, () => {
+function createOrbits(count: number): Orbit[] {
+  return Array.from({ length: count }, () => {
     const radius = 1.95 + Math.pow(Math.random(), 1.6) * 1.9
     return {
       radius,
@@ -35,9 +34,9 @@ function createOrbits(): Orbit[] {
   })
 }
 
-export function OrbitalParticles() {
+export function OrbitalParticles({ count }: { count: number }) {
   const meshRef = useRef<InstancedMesh>(null)
-  const orbits = useMemo(createOrbits, [])
+  const orbits = useMemo(() => createOrbits(count), [count])
   const scratch = useMemo(() => ({ matrix: new Matrix4(), color: new Color() }), [])
 
   useFrame(() => {
@@ -51,7 +50,7 @@ export function OrbitalParticles() {
     const flutter = Math.max(0, motion.high) * 0.1
     const shimmer = motion.phase.z * 2.3
 
-    for (let index = 0; index < PARTICLE_COUNT; index++) {
+    for (let index = 0; index < count; index++) {
       const orbit = orbits[index]
       if (!orbit) continue
 
@@ -80,7 +79,7 @@ export function OrbitalParticles() {
   })
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, PARTICLE_COUNT]} frustumCulled={false}>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
       <icosahedronGeometry args={[1, 1]} />
       <meshBasicMaterial toneMapped={false} />
     </instancedMesh>

@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react'
 import { LIGHT_INTENSITY_RANGE, OPTIC_RANGES, type OpticKey } from '../../ai/directiveSchema'
 import { useStudioStore } from '../../store/useStudioStore'
+import { useUiStore } from '../../store/useUiStore'
 import { GlassPanel } from './GlassPanel'
+import { MorphControl } from './MorphControl'
 
 interface DialProps {
   label: string
@@ -41,13 +43,22 @@ function Dial({ label, value, range: [min, max], onChange }: DialProps) {
   )
 }
 
+/**
+ * The light rig: a side panel on desktop, a bottom sheet toggled from the action bar on
+ * phones, where the dials sit in two columns to stay within thumb reach.
+ */
 export function LightControls() {
   const optics = useStudioStore((state) => state.directive.optics)
   const lights = useStudioStore((state) => state.directive.lights)
+  const sheetOpen = useUiStore((state) => state.panel === 'rig')
   const { tuneOptic, tuneLightIntensity } = useStudioStore.getState()
 
   return (
-    <GlassPanel className="absolute top-1/2 right-5 hidden w-44 -translate-y-1/2 rounded-3xl px-4 py-4 md:block">
+    <GlassPanel
+      className={`absolute inset-x-3 bottom-36 z-20 max-h-[50vh] overflow-y-auto rounded-3xl px-4 py-4 md:inset-x-auto md:top-1/2 md:right-5 md:bottom-auto md:block md:max-h-[calc(100dvh-16rem)] md:w-44 md:-translate-y-1/2 ${
+        sheetOpen ? 'block' : 'hidden'
+      }`}
+    >
       <div className="mb-3.5 flex items-center justify-between">
         <h2 className="label-caps text-white/85">Light rig</h2>
         <div className="flex gap-1" aria-hidden="true">
@@ -60,18 +71,13 @@ export function LightControls() {
           ))}
         </div>
       </div>
-      <div className="space-y-2.5">
+      <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 md:grid-cols-1">
         <Dial label="Intensity" value={lights.intensity} range={LIGHT_INTENSITY_RANGE} onChange={tuneLightIntensity} />
         {OPTIC_DIALS.map(({ key, label }) => (
-          <Dial
-            key={key}
-            label={label}
-            value={optics[key]}
-            range={OPTIC_RANGES[key]}
-            onChange={(value) => tuneOptic(key, value)}
-          />
+          <Dial key={key} label={label} value={optics[key]} range={OPTIC_RANGES[key]} onChange={(value) => tuneOptic(key, value)} />
         ))}
       </div>
+      <MorphControl />
     </GlassPanel>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { audioEngine } from '../../audio/AudioEngine'
+import { audioEngine, type AudioSourceKind } from '../../audio/AudioEngine'
 import { useStudioStore } from '../../store/useStudioStore'
 import { GlassPanel } from './GlassPanel'
 
@@ -9,7 +9,12 @@ const MAX_HZ = 14000
 const EASING = 0.3
 const PADDING = 3
 
-const SOURCE_LABELS = { synth: 'Procedural synth', microphone: 'Live microphone', file: 'Audio file' } as const
+const SOURCE_LABELS: Record<AudioSourceKind, string> = {
+  synth: 'Procedural synth',
+  microphone: 'Live microphone',
+  file: 'Audio file',
+  tab: 'Shared tab',
+}
 
 export function SpectrumCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)

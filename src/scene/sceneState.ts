@@ -31,6 +31,7 @@ interface SceneFrame {
 const PALETTE_KEYS: readonly PaletteKey[] = ['offset', 'amplitude', 'frequency', 'phase']
 const LIGHT_KEYS: readonly LightKey[] = ['key', 'fill', 'rim']
 const TRANSITION_RATE = 1.6
+const WAVE_SECONDS = 2.2
 const TAU = Math.PI * 2
 
 function createFrame(): SceneFrame {
@@ -59,7 +60,29 @@ let primed = false
 
 export const sceneLive = { ...createFrame(), time: 0 }
 
-export function setSceneTarget(look: SceneLook): void {
+/** Target palette, shown by the sculpture behind the transition wave front. */
+export const targetPalette = target.palette
+
+/**
+ * A cue change sweeps across the sculpture as a wave: the old palette stays ahead of the
+ * front, the new one fills in behind it. `fresh` is cleared by whoever aims the wave.
+ */
+export const cueWave = {
+  progress: 1,
+  fresh: false,
+  from: createFrame().palette,
+}
+
+function paletteChanged(look: SceneLook): boolean {
+  return PALETTE_KEYS.some((key) => look.palette[key].some((value, index) => Math.abs(value - target.palette[key].getComponent(index)) > 1e-4))
+}
+
+export function setSceneTarget(look: SceneLook, sweep = true): void {
+  if (primed && sweep && paletteChanged(look)) {
+    for (const key of PALETTE_KEYS) cueWave.from[key].copy(sceneLive.palette[key])
+    cueWave.progress = 0
+    cueWave.fresh = true
+  }
   for (const key of PALETTE_KEYS) target.palette[key].fromArray(look.palette[key])
   for (const key of LIGHT_KEYS) target.lights[key].set(look.lights[key])
   Object.assign(target.scalars, look.optics, { intensity: look.lights.intensity })
@@ -80,7 +103,9 @@ export function stepScene(delta: number, energy: number): void {
   for (const key of Object.keys(scalars) as ScalarKey[]) {
     scalars[key] += (target.scalars[key] - scalars[key]) * blend
   }
-  if (Number.isFinite(delta)) sceneLive.time += delta * scalars.flow * (1 + energy * 0.7)
+  if (!Number.isFinite(delta)) return
+  sceneLive.time += delta * scalars.flow * (1 + energy * 0.7)
+  cueWave.progress = Math.min(1, cueWave.progress + delta / WAVE_SECONDS)
 }
 
 export function samplePalette(t: number, out: Color): Color {

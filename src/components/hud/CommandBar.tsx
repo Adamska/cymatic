@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { PROMPT_CHIPS } from '../../ai/presets'
 import { useStudioStore } from '../../store/useStudioStore'
+import { useUiStore } from '../../store/useUiStore'
 import { GlassPanel } from './GlassPanel'
 
 export function CommandBar() {
@@ -9,6 +10,8 @@ export function CommandBar() {
   const [focused, setFocused] = useState(false)
   const directing = useStudioStore((state) => state.directing)
   const direct = useStudioStore((state) => state.direct)
+  const showcase = useUiStore((state) => state.showcase && state.panel === null)
+  const chipsVisible = focused || showcase
 
   const submit = (text: string) => {
     setPrompt(text)
@@ -25,15 +28,15 @@ export function CommandBar() {
     <form onSubmit={onSubmit} className="pointer-events-none flex w-full max-w-xl flex-col items-center gap-3">
       <div
         className={`flex flex-wrap justify-center gap-1.5 transition-all duration-500 ease-optic ${
-          focused ? 'pointer-events-auto translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+          chipsVisible ? 'pointer-events-auto translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
         }`}
-        aria-hidden={!focused}
+        aria-hidden={!chipsVisible}
       >
         {PROMPT_CHIPS.map((chip) => (
           <button
             key={chip}
             type="button"
-            tabIndex={focused ? 0 : -1}
+            tabIndex={chipsVisible ? 0 : -1}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => submit(chip)}
             className="glass-edge cursor-pointer rounded-full bg-[#0b0d14]/45 px-3 py-1.5 text-[0.7rem] font-light text-white/65 backdrop-blur-xl transition-colors duration-300 hover:text-white"

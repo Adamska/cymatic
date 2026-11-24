@@ -52,6 +52,9 @@ const drift: Record<Register, number> = { low: 0.75, mid: 0.75, high: 1 }
 const spin = { yaw: 0, pitch: 0 }
 const previous = { transient: 0, sparkle: 0, impact: 0 }
 
+/** The last strike on the surface: where it landed in object space and how long ago. */
+export const strikeState = { direction: new Vector3(0, 0, 1), age: 99, force: 0 }
+
 export const motion = {
   low: 0,
   mid: 0,
@@ -63,7 +66,21 @@ export const motion = {
   pitch: 0,
 }
 
+/** A physical knock on the form, from a click, a MIDI pad or a cue change. */
+export function knock(force: number): void {
+  for (const register of Object.keys(springs) as Register[]) springs[register].velocity += force * IMPACT_PUNCH[register]
+  motion.pulse = Math.min(1.2, motion.pulse + force * 0.8)
+}
+
+export function strike(direction: Vector3, force: number): void {
+  strikeState.direction.copy(direction).normalize()
+  strikeState.age = 0
+  strikeState.force = force
+  knock(force * 0.6)
+}
+
 export function stepMotion(delta: number, bands: AudioBands, flow: number): void {
+  strikeState.age += delta
   const kick = Math.max(0, bands.transient - previous.transient)
   const sparkle = Math.max(0, bands.sparkle - previous.sparkle)
   previous.transient = bands.transient

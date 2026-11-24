@@ -1,4 +1,4 @@
-import { Environment, Lightformer } from '@react-three/drei'
+import { Lightformer } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import {
@@ -15,6 +15,7 @@ import {
 } from 'three'
 import { audioEngine } from '../audio/AudioEngine'
 import { sceneLive } from './sceneState'
+import { StudioEnvironment } from './StudioEnvironment'
 
 type PanelMesh = Mesh & { material: MeshBasicMaterial }
 
@@ -120,9 +121,9 @@ export function LightingRig() {
       <spotLight ref={keyLight} angle={0.46} penumbra={0.9} decay={2} />
       <pointLight ref={fillLight} decay={2} />
       <pointLight ref={rimLight} decay={2} />
-      <Environment frames={Infinity} resolution={256}>
+      <StudioEnvironment>
         <StudioPanels />
-      </Environment>
+      </StudioEnvironment>
     </>
   )
 }

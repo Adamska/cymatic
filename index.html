@@ -16,8 +16,67 @@
       rel="stylesheet"
     />
     <title>Cymatic - Spatial Audio and Optical Light Laboratory</title>
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at 50% 46%, #0d1424 0%, #05060a 62%);
+        transition: opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #boot.boot-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot .boot-orb {
+        width: 132px;
+        height: 132px;
+        border-radius: 50%;
+        background: conic-gradient(from 0deg, #9ff5d6, #3f6bff, #c9a6ff, #9ff5d6);
+        filter: blur(18px);
+        opacity: 0.55;
+        animation: boot-breathe 2.4s ease-in-out infinite, boot-spin 7s linear infinite;
+      }
+      #boot .boot-label {
+        position: absolute;
+        font: 500 1.05rem/1 'Geist', ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: -0.01em;
+        color: rgb(255 255 255 / 0.92);
+      }
+      #boot .boot-caption {
+        position: absolute;
+        top: calc(50% + 96px);
+        font: 400 0.625rem/1 'Geist Mono', ui-monospace, monospace;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgb(255 255 255 / 0.35);
+      }
+      @keyframes boot-breathe {
+        50% {
+          transform: scale(1.12);
+          opacity: 0.8;
+        }
+      }
+      @keyframes boot-spin {
+        to {
+          rotate: 360deg;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .boot-orb {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot" aria-hidden="true">
+      <div class="boot-orb"></div>
+      <span class="boot-label">Cymatic</span>
+      <span class="boot-caption">Tuning the light rig</span>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -14,33 +14,38 @@ function readBody(request: IncomingMessage): Promise<string> {
   })
 }
 
-function directorDevApi(): Plugin {
+const DEV_ROUTES = ['/api/direct', '/api/music'] as const
+
+/** Serves the edge handlers in `api/` from the dev server, so local and deployed builds match. */
+function edgeDevApi(): Plugin {
   return {
-    name: 'cymatic-director-dev-api',
+    name: 'cymatic-edge-dev-api',
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use('/api/direct', (req, res) => {
-        void (async () => {
-          try {
-            const module = (await server.ssrLoadModule('/api/direct.ts')) as { default: EdgeHandler }
-            const method = req.method ?? 'GET'
-            const response = await module.default(
-              new Request('http://localhost/api/direct', {
-                method,
-                headers: { 'content-type': 'application/json' },
-                body: method === 'POST' ? await readBody(req) : undefined,
-              }),
-            )
-            res.statusCode = response.status
-            response.headers.forEach((value, key) => res.setHeader(key, value))
-            res.end(await response.text())
-          } catch (error) {
-            server.config.logger.error(String(error))
-            res.statusCode = 500
-            res.end()
-          }
-        })()
-      })
+      for (const route of DEV_ROUTES) {
+        server.middlewares.use(route, (req, res) => {
+          void (async () => {
+            try {
+              const module = (await server.ssrLoadModule(`${route}.ts`)) as { default: EdgeHandler }
+              const method = req.method ?? 'GET'
+              const response = await module.default(
+                new Request(`http://localhost${req.originalUrl ?? route}`, {
+                  method,
+                  headers: { 'content-type': 'application/json' },
+                  body: method === 'POST' ? await readBody(req) : undefined,
+                }),
+              )
+              res.statusCode = response.status
+              response.headers.forEach((value, key) => res.setHeader(key, value))
+              res.end(await response.text())
+            } catch (error) {
+              server.config.logger.error(String(error))
+              res.statusCode = 500
+              res.end()
+            }
+          })()
+        })
+      }
     },
   }
 }
@@ -50,7 +55,7 @@ export default defineConfig(({ mode }) => {
   Object.assign(process.env, env)
 
   return {
-    plugins: [react(), tailwindcss(), directorDevApi()],
+    plugins: [react(), tailwindcss(), edgeDevApi()],
     build: {
       target: 'es2022',
       chunkSizeWarningLimit: 1300,

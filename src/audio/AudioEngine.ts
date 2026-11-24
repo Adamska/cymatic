@@ -1,18 +1,11 @@
-import { AmbientSynth, type SynthPatch } from './AmbientSynth'
+import type { SynthPatch } from './AmbientSynth'
+import { createAudioGraph, disposeAudioGraph, recordingStream, type AudioGraph } from './audioGraph'
 import { BandTracker, type AudioBands } from './BandTracker'
+import { strikeBell } from './bell'
+import { FilePlayer, type PlaybackOptions } from './FilePlayer'
 import { SpectrumGate } from './SpectrumGate'
 
-export type AudioSourceKind = 'synth' | 'file' | 'microphone'
-
-interface AudioGraph {
-  context: AudioContext
-  analyser: AnalyserNode
-  bus: GainNode
-  limiter: DynamicsCompressorNode
-  master: GainNode
-  synth: AmbientSynth
-  synthGain: GainNode
-}
+export type AudioSourceKind = 'synth' | 'file' | 'microphone' | 'tab'
 
 const FFT_SIZE = 4096
 const FADE_SECONDS = 0.35
@@ -34,9 +27,9 @@ export class AudioEngine {
   private readonly tracker = new BandTracker()
   private readonly gate = new SpectrumGate(FFT_SIZE / 2)
   private graph: AudioGraph | null = null
-  private fileNode: AudioBufferSourceNode | null = null
-  private microphoneNode: MediaStreamAudioSourceNode | null = null
-  private microphoneStream: MediaStream | null = null
+  private filePlayer: FilePlayer | null = null
+  private streamNode: MediaStreamAudioSourceNode | null = null
+  private stream: MediaStream | null = null
   private patch: SynthPatch = DEFAULT_PATCH
   private volume = 0.8
 
@@ -56,6 +49,11 @@ export class AudioEngine {
     return this.sampleRate / FFT_SIZE
   }
 
+  /** The file transport, or null while no file has been loaded. */
+  get player(): FilePlayer | null {
+    return this.filePlayer?.loaded ? this.filePlayer : null
+  }
+
   async engage(): Promise<void> {
     await this.ensureGraph()
     this.useSynth()
@@ -67,31 +65,39 @@ export class AudioEngine {
     this.fadeSynth(1)
   }
 
-  async playFile(file: File): Promise<void> {
+  async playFile(file: Blob, options: PlaybackOptions = { loop: true }): Promise<void> {
     const { context, bus } = await this.ensureGraph()
     const buffer = await context.decodeAudioData(await file.arrayBuffer())
     this.releaseExternalSources()
     this.recalibrate()
     this.fadeSynth(0)
-    const node = context.createBufferSource()
-    node.buffer = buffer
-    node.loop = true
-    node.connect(bus)
-    node.start()
-    this.fileNode = node
+    this.filePlayer ??= new FilePlayer(context, bus)
+    this.filePlayer.load(buffer, options)
   }
 
   async useMicrophone(): Promise<void> {
-    const { context, analyser } = await this.ensureGraph()
+    await this.ensureGraph()
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
     })
-    this.releaseExternalSources()
-    this.recalibrate()
-    this.fadeSynth(0)
-    this.microphoneStream = stream
-    this.microphoneNode = context.createMediaStreamSource(stream)
-    this.microphoneNode.connect(analyser)
+    this.attachStream(stream)
+  }
+
+  /** Captures the audio of another tab or window. The browser asks the user what to share. */
+  async useTab(onEnded: () => void): Promise<void> {
+    await this.ensureGraph()
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+    stream.getVideoTracks().forEach((track) => track.stop())
+    const [audio] = stream.getAudioTracks()
+    if (!audio) throw new Error('The shared surface carries no audio')
+    audio.addEventListener('ended', onEnded, { once: true })
+    this.attachStream(stream)
+  }
+
+  /** Rings a glass bell through the analysed bus so the visuals answer the strike. */
+  async strike(frequency: number, velocity: number): Promise<void> {
+    const { context, bus } = await this.ensureGraph()
+    strikeBell(context, bus, frequency, velocity)
   }
 
   applyPatch(patch: SynthPatch): void {
@@ -102,6 +108,10 @@ export class AudioEngine {
   setVolume(volume: number): void {
     this.volume = volume
     this.graph?.master.gain.setTargetAtTime(volume, this.graph.context.currentTime, 0.05)
+  }
+
+  recordingStream(): MediaStream | null {
+    return this.graph ? recordingStream(this.graph) : null
   }
 
   update(delta: number): void {
@@ -115,20 +125,26 @@ export class AudioEngine {
 
   dispose(): void {
     this.releaseExternalSources()
-    if (this.graph) {
-      const { context, analyser, bus, limiter, master, synth, synthGain } = this.graph
-      synth.dispose()
-      for (const node of [synthGain, bus, analyser, limiter, master]) node.disconnect()
-      void context.close()
-      this.graph = null
-    }
+    this.filePlayer = null
+    if (this.graph) disposeAudioGraph(this.graph)
+    this.graph = null
     this.spectrum.fill(0)
     this.tracker.reset()
     this.gate.reset()
   }
 
+  private attachStream(stream: MediaStream): void {
+    if (!this.graph) return
+    this.releaseExternalSources()
+    this.recalibrate()
+    this.fadeSynth(0)
+    this.stream = stream
+    this.streamNode = this.graph.context.createMediaStreamSource(stream)
+    this.streamNode.connect(this.graph.analyser)
+  }
+
   private async ensureGraph(): Promise<AudioGraph> {
-    this.graph ??= this.createGraph()
+    this.graph ??= createAudioGraph(FFT_SIZE, this.patch, this.volume)
     const { context } = this.graph
     if (context.state === 'suspended') {
       const timeout = new Promise<void>((resolve) => window.setTimeout(resolve, RESUME_TIMEOUT_MS))
@@ -138,32 +154,6 @@ export class AudioEngine {
       }
     }
     return this.graph
-  }
-
-  private createGraph(): AudioGraph {
-    const context = new AudioContext({ latencyHint: 'playback' })
-    const analyser = context.createAnalyser()
-    analyser.fftSize = FFT_SIZE
-    analyser.smoothingTimeConstant = 0.6
-
-    const bus = context.createGain()
-    const limiter = context.createDynamicsCompressor()
-    limiter.threshold.value = -9
-    limiter.knee.value = 12
-    limiter.ratio.value = 8
-    limiter.attack.value = 0.004
-    limiter.release.value = 0.25
-    const master = context.createGain()
-    master.gain.value = this.volume
-    bus.connect(analyser)
-    bus.connect(limiter).connect(master).connect(context.destination)
-
-    const synthGain = context.createGain()
-    synthGain.gain.value = 0
-    const synth = new AmbientSynth(context, this.patch)
-    synth.output.connect(synthGain).connect(bus)
-
-    return { context, analyser, bus, limiter, master, synth, synthGain }
   }
 
   private recalibrate(): void {
@@ -177,13 +167,11 @@ export class AudioEngine {
   }
 
   private releaseExternalSources(): void {
-    this.fileNode?.stop()
-    this.fileNode?.disconnect()
-    this.fileNode = null
-    this.microphoneNode?.disconnect()
-    this.microphoneNode = null
-    this.microphoneStream?.getTracks().forEach((track) => track.stop())
-    this.microphoneStream = null
+    this.filePlayer?.stop()
+    this.streamNode?.disconnect()
+    this.streamNode = null
+    this.stream?.getTracks().forEach((track) => track.stop())
+    this.stream = null
   }
 }
 

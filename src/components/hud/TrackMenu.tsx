@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from 'react'
 import { SAMPLE_TRACKS, type SampleTrack } from '../../audio/sampleTracks'
 import { useStudioStore } from '../../store/useStudioStore'
+import { useUiStore } from '../../store/useUiStore'
 import { GlassPanel } from './GlassPanel'
 
 interface TrackMenuProps {
@@ -79,6 +80,16 @@ export function TrackMenu({ anchorRef, onBrowse, onClose }: TrackMenuProps) {
       >
         <span className="text-xs font-light text-white/85">Open your own file</span>
         <span className="label-caps text-white/35">Browse</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        disabled={loadingId !== null}
+        onClick={() => useUiStore.getState().openPanel('playlist')}
+        className={ITEM_CLASS}
+      >
+        <span className="text-xs font-light text-white/85">Import a playlist</span>
+        <span className="label-caps text-white/35">Link</span>
       </button>
     </GlassPanel>
   )

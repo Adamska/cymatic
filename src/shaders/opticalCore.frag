@@ -8,6 +8,13 @@ uniform vec3 uPaletteOffset;
 uniform vec3 uPaletteAmplitude;
 uniform vec3 uPaletteFrequency;
 uniform vec3 uPalettePhase;
+uniform vec3 uFromOffset;
+uniform vec3 uFromAmplitude;
+uniform vec3 uFromFrequency;
+uniform vec3 uFromPhase;
+uniform vec3 uWaveOrigin;
+uniform float uWave;
+uniform float uShimmer;
 uniform samplerCube uEnvMap;
 
 #if NUM_POINT_LIGHTS > 0
@@ -38,6 +45,7 @@ varying vec3 vViewNormal;
 varying float vHeight;
 varying float vSpectrum;
 varying float vFrequency;
+varying vec3 vDirection;
 
 const float TAU = 6.28318530718;
 const float FILM_IOR = 1.38;
@@ -47,9 +55,16 @@ const float SHININESS = 96.0;
 const float SCATTER_DISTORTION = 0.42;
 const float SCATTER_POWER = 3.0;
 const float BASE_REFLECTANCE = 0.06;
+const float PI = 3.14159265359;
 
+float reveal;
+float ridge;
+
+// Behind the transition front the new cue shows, ahead of it the previous one lingers.
 vec3 palette(float t) {
-  return max(uPaletteOffset + uPaletteAmplitude * cos(TAU * (uPaletteFrequency * t + uPalettePhase)), 0.0);
+  vec3 next = max(uPaletteOffset + uPaletteAmplitude * cos(TAU * (uPaletteFrequency * t + uPalettePhase)), 0.0);
+  vec3 previous = max(uFromOffset + uFromAmplitude * cos(TAU * (uFromFrequency * t + uFromPhase)), 0.0);
+  return mix(previous, next, reveal);
 }
 
 vec3 thinFilm(float cosTheta, float thickness) {
@@ -81,6 +96,11 @@ void shade(vec3 L, vec3 radiance, vec3 N, vec3 V, inout vec3 diffuse, inout vec3
 }
 
 void main() {
+  float travelled = acos(clamp(dot(normalize(vDirection), uWaveOrigin), -1.0, 1.0)) / PI;
+  float front = uWave * 1.25;
+  reveal = 1.0 - smoothstep(front - 0.16, front, travelled);
+  ridge = exp(-pow((travelled - front) / 0.04, 2.0)) * (1.0 - uWave);
+
   vec3 N = normalize(vViewNormal);
   vec3 V = normalize(vViewPosition);
   float NdotV = clamp(dot(N, V), 0.0, 1.0);
@@ -115,6 +135,7 @@ void main() {
   vec3 glow = palette(tone + 0.33 + uHigh * 0.15);
 
   float thickness = mix(250.0, 620.0, clamp(0.5 + vHeight * 1.7, 0.0, 1.0)) + fresnel * 110.0 + uHigh * 170.0;
+  thickness += sin(vHeight * 38.0 + uTime * 9.0 + vFrequency * 12.0) * uShimmer * 140.0;
   vec3 film = thinFilm(NdotV, thickness);
   vec3 sheen = mix(vec3(1.0), film * 1.7, uIridescence);
 
@@ -132,6 +153,8 @@ void main() {
   color += film * fresnel * uIridescence * (0.3 + uHigh * 0.8);
   color += glow * crest * (uRms * 0.7 + uBass * 0.25);
   color += palette(0.15 + vFrequency * 0.7 + uTime * 0.01) * pow(max(vSpectrum, 0.0), 2.2) * (0.12 + fresnel * 0.5);
+
+  color += palette(0.5 + vHeight) * ridge * 3.2;
 
   gl_FragColor = vec4(color, 1.0);
 

@@ -3,9 +3,15 @@ import type { OpticKey, SceneDirective } from '../ai/directiveSchema'
 import { DEFAULT_DIRECTIVE } from '../ai/presets'
 import { directScene } from '../ai/sceneDirector'
 import { audioEngine, type AudioSourceKind } from '../audio/AudioEngine'
+import type { PlaybackOptions } from '../audio/FilePlayer'
 import type { SampleTrack } from '../audio/sampleTracks'
 
-export type DirectiveOrigin = 'default' | 'model' | 'preset'
+export type DirectiveOrigin = 'default' | 'model' | 'preset' | 'shared' | 'auto' | 'history' | 'morph'
+
+export interface CueEntry {
+  id: number
+  directive: SceneDirective
+}
 
 interface StudioState {
   engaged: boolean
@@ -14,22 +20,29 @@ interface StudioState {
   volume: number
   directive: SceneDirective
   origin: DirectiveOrigin
+  history: readonly CueEntry[]
   directing: boolean
   notice: string | null
   engage: () => Promise<void>
   selectSynth: () => void
   selectMicrophone: () => Promise<void>
+  selectTab: () => Promise<void>
   loadFile: (file: File) => Promise<void>
   loadTrack: (track: SampleTrack) => Promise<void>
+  playBlob: (blob: Blob, trackName: string, options?: PlaybackOptions) => Promise<boolean>
   setVolume: (volume: number) => void
   direct: (prompt: string) => Promise<void>
+  setDirective: (directive: SceneDirective, origin: DirectiveOrigin) => void
   tuneOptic: (key: OpticKey, value: number) => void
   tuneLightIntensity: (value: number) => void
-  dismissNotice: () => void
+  notify: (notice: string | null) => void
 }
 
 const AUDIO_FILE_PATTERN = /\.(mp3|wav|ogg|oga|m4a|flac|aac)$/i
+const HISTORY_LIMIT = 8
+const REMEMBERED_ORIGINS: ReadonlySet<DirectiveOrigin> = new Set(['default', 'model', 'preset', 'shared', 'auto'])
 let pendingDirection: AbortController | null = null
+let nextCueId = 1
 
 export const useStudioStore = create<StudioState>()((set, get) => ({
   engaged: false,
@@ -38,6 +51,7 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
   volume: 0.8,
   directive: DEFAULT_DIRECTIVE,
   origin: 'default',
+  history: [{ id: 0, directive: DEFAULT_DIRECTIVE }],
   directing: false,
   notice: null,
 
@@ -64,28 +78,43 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     }
   },
 
+  selectTab: async () => {
+    try {
+      await audioEngine.useTab(() => {
+        if (get().source === 'tab') set({ notice: 'Tab sharing stopped.' })
+      })
+      set({ engaged: true, source: 'tab', trackName: null, notice: null })
+    } catch {
+      set({ notice: 'Share a tab and tick "Share tab audio" to analyse it.' })
+    }
+  },
+
   loadFile: async (file) => {
     if (!file.type.startsWith('audio/') && !AUDIO_FILE_PATTERN.test(file.name)) {
       set({ notice: 'Drop an MP3, WAV or OGG file.' })
       return
     }
-    try {
-      await audioEngine.playFile(file)
-      set({ engaged: true, source: 'file', trackName: file.name.replace(/\.[^.]+$/, ''), notice: null })
-    } catch {
-      set({ notice: 'That file could not be decoded.' })
-    }
+    await get().playBlob(file, file.name.replace(/\.[^.]+$/, ''))
   },
 
   loadTrack: async (track) => {
     try {
       const response = await fetch(track.url)
       if (!response.ok) throw new Error(`Track request failed with ${response.status}`)
-      const blob = await response.blob()
-      await audioEngine.playFile(new File([blob], `${track.id}.mp3`, { type: blob.type || 'audio/mpeg' }))
-      set({ engaged: true, source: 'file', trackName: track.title, notice: null })
+      await get().playBlob(await response.blob(), track.title)
     } catch {
       set({ notice: 'The sample track could not be loaded.' })
+    }
+  },
+
+  playBlob: async (blob, trackName, options) => {
+    try {
+      await audioEngine.playFile(blob, options)
+      set({ engaged: true, source: 'file', trackName, notice: null })
+      return true
+    } catch {
+      set({ notice: 'That file could not be decoded.' })
+      return false
     }
   },
 
@@ -105,10 +134,17 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
 
     try {
       const { directive, source } = await directScene(trimmed, controller.signal)
-      set({ directive, origin: source, directing: false })
+      set({ directing: false })
+      get().setDirective(directive, source)
     } catch {
       if (pendingDirection === controller) set({ directing: false })
     }
+  },
+
+  setDirective: (directive, origin) => {
+    const remember = REMEMBERED_ORIGINS.has(origin)
+    const history = remember ? [{ id: nextCueId++, directive }, ...get().history].slice(0, HISTORY_LIMIT) : get().history
+    set({ directive, origin, history })
   },
 
   tuneOptic: (key, value) => {
@@ -121,5 +157,5 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     set({ directive: { ...directive, lights: { ...directive.lights, intensity: value } } })
   },
 
-  dismissNotice: () => set({ notice: null }),
+  notify: (notice) => set({ notice }),
 }))

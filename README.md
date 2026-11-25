@@ -17,7 +17,7 @@ An interactive spatial audio and optical light laboratory. A displaced glass scu
 - **Living camera and light.** The orbit speeds up with the energy of the music and the lens punches in on impacts. Cue changes sweep across the form as a bright wave front, shafts of light stream from an eclipse disc behind it, and a radial blur follows each impulse. The background grows with the music: on strong passages a nebula rises behind the form, kicks flash through it and send shock rings outward.
 - **Touch the form.** Click the sculpture to strike it: ripples spread from the point of impact and it rings low and deep, a singing bowl over a soft gong with a wordless choir, in a long dark hall. The strike follows the key detected in the music, or the drone of the synth, and its tone and level follow the mix. Repeated strikes walk a short melodic phrase that starts over after a pause.
 - **AI scene director.** Describe a light and a sound in the command bar, and a Zod-validated `SceneDirective` drives the palette, lights, bloom, turbulence and synth patch. Every parameter glides to its new value. Turn on `Auto` and the director changes the cue on its own when the music moves into a new section.
-- **Never offline.** Without an `OPENAI_API_KEY`, or when the endpoint is unreachable, prompts are resolved by a deterministic semantic matcher that scores, blends and modifies a library of hand-tuned cues.
+- **Never offline.** Without a `GEMINI_API_KEY` or `OPENAI_API_KEY`, or when the endpoint is unreachable, prompts are resolved by a deterministic semantic matcher that scores, blends and modifies a library of hand-tuned cues.
 
 ## Studio tools
 
@@ -55,11 +55,11 @@ Open the printed URL and press `[ Play a track ]`. The app is fully functional w
 To enable the language model, copy `.env.example` to `.env` and set a key:
 
 ```bash
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4.1-mini
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-3.8-flash
 ```
 
-`OPENAI_MODEL` is optional and accepts any OpenAI model with structured output support. The dev server mounts every handler in `api/` at the same path as in production.
+The director also accepts `OPENAI_API_KEY` with an optional `OPENAI_MODEL`; when both keys are set, Gemini is used. Both model variables are optional and accept any model of that provider with structured output support. The dev server mounts every handler in `api/` at the same path as in production.
 
 | Script | Purpose |
 | --- | --- |
@@ -152,7 +152,7 @@ The same schema validates model output on the server, the response on the client
 
 ## Deployment
 
-The project deploys to Vercel without configuration: Vite builds the client and each file in `api/` becomes an Edge Function. Add `OPENAI_API_KEY` in the project settings to enable the model. Without a key the director answers from the preset library, and on a static host with no endpoint at all the client falls back to the same matcher.
+The project deploys to Vercel without configuration: Vite builds the client and each file in `api/` becomes an Edge Function. Add `GEMINI_API_KEY` or `OPENAI_API_KEY` in the project settings to enable the model. Without a key the director answers from the preset library, and on a static host with no endpoint at all the client falls back to the same matcher.
 
 Playlist previews are provided by Deezer.
 

@@ -64,9 +64,9 @@ function StudioPanels() {
     const level = scalars.intensity
 
     if (carousel.current) carousel.current.rotation.y = time * 0.16
-    tint(keyPanel.current, lights.key, level * (2.6 + bands.rms * 1.6))
-    tint(fillPanel.current, lights.fill, level * (2 + bands.mid * 1.6))
-    tint(rimPanel.current, lights.rim, level * (2.4 + bands.high * 3))
+    tint(keyPanel.current, lights.key, level * (2.6 + bands.rms * 0.8))
+    tint(fillPanel.current, lights.fill, level * (2 + bands.mid * 0.7))
+    tint(rimPanel.current, lights.rim, level * (2.4 + bands.high * 1.1))
     tint(halo.current, blend.copy(lights.key).lerp(lights.rim, 0.5), level * (1.2 + Math.max(bands.transient, bands.impact) * 4))
   })
 
@@ -107,12 +107,12 @@ export function LightingRig() {
     if (fill) {
       fill.position.set(-4.2, Math.sin(time * 0.23) * 1.6 - 0.8, Math.cos(time * 0.19) * 2 + 2.4)
       fill.color.copy(lights.fill)
-      fill.intensity = FILL_CANDELA * level * (0.7 + bands.mid * 0.7)
+      fill.intensity = FILL_CANDELA * level * (0.7 + bands.mid * 0.35)
     }
     if (rim) {
       rim.position.set(Math.sin(time * 0.29) * 3.2, 1.6 + Math.cos(time * 0.21) * 1.2, -4.4)
       rim.color.copy(lights.rim)
-      rim.intensity = RIM_CANDELA * level * (0.6 + bands.high * 1.2 + bands.transient * 1.5)
+      rim.intensity = RIM_CANDELA * level * (0.6 + bands.high * 0.5 + bands.transient * 1.2)
     }
   })
 

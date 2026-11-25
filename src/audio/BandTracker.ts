@@ -46,15 +46,15 @@ const IMPACT_RANGE_DB = 10
 const KICK_CUTOFF_HZ = 90
 const SPARKLE_FROM_HZ = 4000
 
-const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
-const toDecibels = (power: number): number => 10 * Math.log10(power + 1e-12)
+export const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
+export const toDecibels = (power: number): number => 10 * Math.log10(power + 1e-12)
 
-function follow(current: number, target: number, delta: number, attack: number, release: number): number {
+export function follow(current: number, target: number, delta: number, attack: number, release: number): number {
   const rate = target > current ? attack : release
   return current + (target - current) * (1 - Math.exp(-delta * rate))
 }
 
-function bandPower(spectrumDb: Float32Array, binHz: number, from: number, to: number): number {
+export function bandPower(spectrumDb: Float32Array, binHz: number, from: number, to: number): number {
   const first = Math.max(1, Math.floor(from / binHz))
   const last = Math.min(spectrumDb.length - 1, Math.ceil(to / binHz))
   let power = 0

@@ -1,74 +1,55 @@
 import { Vector3 } from 'three'
+import type { BandDynamics } from '../audio/BandDynamics'
 import type { AudioBands } from '../audio/BandTracker'
+import { bandMotion, ease, punchBands, squashBody, stepBands } from './bandMotion'
 
-interface Spring {
-  value: number
-  velocity: number
-  stiffness: number
-  damping: number
-}
+export type { SkinEvent } from './bandMotion'
 
-type Register = 'low' | 'mid' | 'high'
-
-const TAU = Math.PI * 2
-const SUBSTEP = 1 / 120
-const SUSTAIN_RISE: Record<Register, number> = { low: 14, mid: 16, high: 24 }
-const SUSTAIN_FALL: Record<Register, number> = { low: 3.5, mid: 4.5, high: 8 }
-const IMPACT_PUNCH: Record<Register, number> = { low: 4.5, mid: 3.2, high: 2.4 }
-const KICK_PUNCH = 4
-const SPARKLE_PUNCH = 6
+const KNOCK_PUNCH: readonly number[] = [4.5, 4, 3.4, 3, 2.6, 2.2]
 const PULSE_DECAY = 5
 const CHARGE_RISE = 6
 const CHARGE_FALL = 1.4
-const DRIFT_RISE = 5
-const DRIFT_FALL = 1.6
-const KICK_IMPULSE = 0.16
-const BASS_TORQUE = 0.14
-const SPIN_FRICTION = 0.4
+const DRIFT_RISE = 3
+const DRIFT_FALL = 1.2
+const KICK_IMPULSE = 0.14
+const BASS_TORQUE = 0.1
+const MOMENTUM_TORQUE = 0.09
+const SPIN_FRICTION = 0.45
+const UPRIGHT_PULL = 1.4
 
-function createSpring(frequencyHz: number, dampingRatio: number): Spring {
-  const omega = TAU * frequencyHz
-  return { value: 0, velocity: 0, stiffness: omega * omega, damping: 2 * dampingRatio * omega }
-}
-
-function advance(spring: Spring, target: number, delta: number): number {
-  spring.velocity += ((target - spring.value) * spring.stiffness - spring.velocity * spring.damping) * delta
-  spring.value += spring.velocity * delta
-  return spring.value
-}
-
-function ease(current: number, target: number, riseRate: number, fallRate: number, delta: number): number {
-  const rate = target > current ? riseRate : fallRate
-  return current + (target - current) * (1 - Math.exp(-delta * rate))
-}
-
-const springs: Record<Register, Spring> = {
-  low: createSpring(1.5, 0.55),
-  mid: createSpring(2.1, 0.6),
-  high: createSpring(4.2, 0.65),
-}
-const sustain: Record<Register, number> = { low: 0, mid: 0, high: 0 }
-const drift: Record<Register, number> = { low: 0.75, mid: 0.75, high: 1 }
+const drift = { low: 0.5, mid: 0.5, high: 0.8 }
 const spin = { yaw: 0, pitch: 0 }
-const previous = { transient: 0, sparkle: 0, impact: 0 }
+let lastImpact = 0
 
 /** The last strike on the surface: where it landed in object space and how long ago. */
 export const strikeState = { direction: new Vector3(0, 0, 1), age: 99, force: 0 }
 
 export const motion = {
+  /** One spring per band, from kick body to air; the sculpture reads these directly. */
+  bands: bandMotion.values,
   low: 0,
   mid: 0,
   high: 0,
+  pitch: 0.5,
+  /** Momentum left by recent peaks in the low, middle and high registers. */
+  surge: new Vector3(),
+  /** Squash and stretch: positive flattens the body, negative stretches it tall. */
+  squash: 0,
+  /** How strong the passage is, 0 calm to 1 at the peak of a drop. Slow to fall. */
+  intensity: 0,
+  kickEvent: bandMotion.kickEvent,
+  snapEvent: bandMotion.snapEvent,
   charge: 0,
   pulse: 0,
   phase: new Vector3(),
   yaw: 0,
-  pitch: 0,
+  tilt: 0,
 }
 
 /** A physical knock on the form, from a click, a MIDI pad or a cue change. */
 export function knock(force: number): void {
-  for (const register of Object.keys(springs) as Register[]) springs[register].velocity += force * IMPACT_PUNCH[register]
+  punchBands(force, KNOCK_PUNCH)
+  squashBody(force * 0.5)
   motion.pulse = Math.min(1.2, motion.pulse + force * 0.8)
 }
 
@@ -79,51 +60,48 @@ export function strike(direction: Vector3, force: number): void {
   knock(force * 0.6)
 }
 
-export function stepMotion(delta: number, bands: AudioBands, flow: number): void {
-  strikeState.age += delta
-  const kick = Math.max(0, bands.transient - previous.transient)
-  const sparkle = Math.max(0, bands.sparkle - previous.sparkle)
-  previous.transient = bands.transient
-  const hit = Math.max(0, bands.impact - previous.impact)
-  previous.sparkle = bands.sparkle
-  previous.impact = bands.impact
+function pair(values: Float32Array, first: number): number {
+  return ((values[first] ?? 0) + (values[first + 1] ?? 0)) * 0.5
+}
 
-  const targets: Record<Register, number> = {
-    low: Math.min(1.2, bands.sub * 0.55 + bands.bass * 0.6),
-    mid: bands.mid * 1.1,
-    high: bands.high * 1.15,
+export function stepMotion(delta: number, bands: AudioBands, dynamics: BandDynamics, flow: number): void {
+  strikeState.age += delta
+  const hit = Math.max(0, bands.impact - lastImpact)
+  lastImpact = bands.impact
+  if (hit > 0) {
+    punchBands(hit * 0.5, KNOCK_PUNCH)
+    squashBody(hit * 0.25)
   }
-  for (const register of Object.keys(targets) as Register[]) {
-    sustain[register] = ease(sustain[register], targets[register], SUSTAIN_RISE[register], SUSTAIN_FALL[register], delta)
-  }
-  springs.low.velocity += kick * KICK_PUNCH
-  springs.high.velocity += sparkle * SPARKLE_PUNCH
-  for (const register of Object.keys(springs) as Register[]) springs[register].velocity += hit * IMPACT_PUNCH[register]
   motion.pulse = Math.min(1.2, motion.pulse * Math.exp(-delta * PULSE_DECAY) + hit)
 
-  for (let remaining = delta; remaining > 1e-6; remaining -= SUBSTEP) {
-    const step = Math.min(remaining, SUBSTEP)
-    motion.low = advance(springs.low, sustain.low, step)
-    motion.mid = advance(springs.mid, sustain.mid, step)
-    motion.high = advance(springs.high, sustain.high, step)
-  }
+  const kick = stepBands(delta, dynamics)
+  const { momentum } = bandMotion
+  motion.low = Math.max(motion.bands[0] ?? 0, motion.bands[1] ?? 0)
+  motion.mid = pair(motion.bands, 2)
+  motion.high = pair(motion.bands, 4)
+  motion.surge.set(Math.max(momentum[0] ?? 0, momentum[1] ?? 0), pair(momentum, 2), pair(momentum, 4))
+  motion.intensity = bandMotion.intensity
+  motion.squash = bandMotion.squash
+  motion.pitch = dynamics.pitch
   motion.charge = ease(motion.charge, bands.rms, CHARGE_RISE, CHARGE_FALL, delta)
 
-  const swell = Math.max(0, motion.low)
-  drift.low = ease(drift.low, 0.75 + motion.charge * 0.8 + swell * 0.6, DRIFT_RISE, DRIFT_FALL, delta)
-  drift.mid = ease(drift.mid, 0.75 + sustain.mid * 2.2, DRIFT_RISE, DRIFT_FALL, delta)
-  drift.high = ease(drift.high, 1 + sustain.high * 5, DRIFT_RISE * 1.6, DRIFT_FALL * 2, delta)
+  // The skin keeps flowing after a peak: momentum speeds up each register's drift and fades.
+  const { levels } = dynamics
+  const { surge } = motion
+  drift.low = ease(drift.low, 0.45 + Math.max(levels[0] ?? 0, levels[1] ?? 0) * 0.5 + surge.x * 0.7, DRIFT_RISE, DRIFT_FALL, delta)
+  drift.mid = ease(drift.mid, 0.45 + pair(levels, 2) * 0.9 + surge.y * 0.9, DRIFT_RISE, DRIFT_FALL, delta)
+  drift.high = ease(drift.high, 0.7 + pair(levels, 4) * 1.6 + surge.z * 1.4, DRIFT_RISE, DRIFT_FALL, delta)
   motion.phase.x += drift.low * flow * delta
   motion.phase.y += drift.mid * flow * delta
   motion.phase.z += drift.high * flow * delta
 
   const heading = motion.phase.x * 1.7
-  spin.yaw += kick * KICK_IMPULSE * Math.cos(heading) + swell * BASS_TORQUE * delta
-  spin.pitch += kick * KICK_IMPULSE * Math.sin(heading)
-
+  const torque = Math.max(0, motion.low) * BASS_TORQUE + (surge.x + surge.y * 0.5) * MOMENTUM_TORQUE
+  spin.yaw += kick * KICK_IMPULSE * Math.cos(heading) + torque * delta
+  spin.pitch += kick * KICK_IMPULSE * Math.sin(heading) - motion.tilt * UPRIGHT_PULL * delta
   const friction = Math.exp(-delta * SPIN_FRICTION)
   spin.yaw *= friction
   spin.pitch *= friction
   motion.yaw += spin.yaw * delta
-  motion.pitch += spin.pitch * delta
+  motion.tilt += spin.pitch * delta
 }

@@ -1,23 +1,25 @@
-import { CubeTexture, ShaderChunk, ShaderMaterial, UniformsLib, UniformsUtils, Vector3 } from 'three'
+import { CubeTexture, ShaderMaterial, UniformsLib, UniformsUtils, Vector3 } from 'three'
 import fragmentShader from '../shaders/opticalCore.frag?raw'
 import vertexShader from '../shaders/opticalCore.vert?raw'
-import simplexNoise from '../shaders/simplexNoise.glsl?raw'
 import { motion, strikeState } from './motionState'
+import './shaderChunks'
 import { cueWave, targetPalette } from './sceneState'
 import type { SpectrumField } from './spectrumField'
 
 const ENVIRONMENT_INTENSITY = 1.15
 
-Object.assign(ShaderChunk, { cymatic_simplex: simplexNoise })
-
 export function createCoreUniforms(field: SpectrumField) {
   return {
     uTime: { value: 0 },
     uPhase: { value: motion.phase },
-    uSwell: { value: 0 },
-    uTwist: { value: 0 },
-    uRipple: { value: 0 },
-    uEnergy: { value: 0 },
+    uBands: { value: motion.bands },
+    uPitch: { value: 0.5 },
+    uKickAge: { value: 99 },
+    uKickForce: { value: 0 },
+    uSnapAge: { value: 99 },
+    uSnapForce: { value: 0 },
+    uStretch: { value: new Vector3(1, 1, 1) },
+    uAirGlow: { value: 0 },
     uBass: { value: 0 },
     uHigh: { value: 0 },
     uRms: { value: 0 },

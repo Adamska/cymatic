@@ -1,9 +1,10 @@
 import type { SynthPatch } from './AmbientSynth'
 import { createAudioGraph, disposeAudioGraph, recordingStream, type AudioGraph } from './audioGraph'
+import { BandDynamics } from './BandDynamics'
 import { BandTracker, type AudioBands } from './BandTracker'
-import { strikeBell } from './bell'
 import { FilePlayer, type PlaybackOptions } from './FilePlayer'
 import { SpectrumGate } from './SpectrumGate'
+import { StrikeVoice } from './strikeVoice'
 
 export type AudioSourceKind = 'synth' | 'file' | 'microphone' | 'tab'
 
@@ -25,9 +26,11 @@ export class AudioEngine {
   private readonly spectrumDb = new Float32Array(FFT_SIZE / 2)
   private readonly waveform = new Float32Array(FFT_SIZE)
   private readonly tracker = new BandTracker()
+  private readonly bandDynamics = new BandDynamics()
   private readonly gate = new SpectrumGate(FFT_SIZE / 2)
   private graph: AudioGraph | null = null
   private filePlayer: FilePlayer | null = null
+  private strikeVoice: StrikeVoice | null = null
   private streamNode: MediaStreamAudioSourceNode | null = null
   private stream: MediaStream | null = null
   private patch: SynthPatch = DEFAULT_PATCH
@@ -35,6 +38,11 @@ export class AudioEngine {
 
   get bands(): AudioBands {
     return this.tracker.bands
+  }
+
+  /** Per-band levels and accents for the sculpture. */
+  get dynamics(): BandDynamics {
+    return this.bandDynamics
   }
 
   get gainDb(): number {
@@ -94,10 +102,13 @@ export class AudioEngine {
     this.attachStream(stream)
   }
 
-  /** Rings a glass bell through the analysed bus so the visuals answer the strike. */
+  /** Strikes the sculpture through the analysed bus, voiced to sit inside the music playing. */
   async strike(frequency: number, velocity: number): Promise<void> {
     const { context, bus } = await this.ensureGraph()
-    strikeBell(context, bus, frequency, velocity)
+    this.strikeVoice ??= new StrikeVoice(context, bus)
+    const loudness = this.tracker.bands.rms
+    const brightness = loudness < 0.05 ? 0.35 : this.bandDynamics.brightness
+    this.strikeVoice.play(frequency, velocity, { brightness, loudness })
   }
 
   applyPatch(patch: SynthPatch): void {
@@ -120,16 +131,19 @@ export class AudioEngine {
     this.graph.analyser.getFloatFrequencyData(spectrumDb)
     this.graph.analyser.getFloatTimeDomainData(waveform)
     tracker.update(spectrumDb, waveform, this.binHz, delta)
+    this.bandDynamics.update(spectrumDb, this.binHz, tracker.gainDb, tracker.bands.rms, delta)
     this.gate.apply(spectrumDb, tracker.gainDb, delta, this.spectrum)
   }
 
   dispose(): void {
     this.releaseExternalSources()
     this.filePlayer = null
+    this.strikeVoice = null
     if (this.graph) disposeAudioGraph(this.graph)
     this.graph = null
     this.spectrum.fill(0)
     this.tracker.reset()
+    this.bandDynamics.reset()
     this.gate.reset()
   }
 
@@ -144,7 +158,11 @@ export class AudioEngine {
   }
 
   private async ensureGraph(): Promise<AudioGraph> {
-    this.graph ??= createAudioGraph(FFT_SIZE, this.patch, this.volume)
+    if (!this.graph) {
+      const graph = (this.graph = createAudioGraph(FFT_SIZE, this.patch, this.volume))
+      // The strike hall takes a moment to build; prepare it before the first click needs it.
+      window.setTimeout(() => this.graph === graph && (this.strikeVoice ??= new StrikeVoice(graph.context, graph.bus)), 1500)
+    }
     const { context } = this.graph
     if (context.state === 'suspended') {
       const timeout = new Promise<void>((resolve) => window.setTimeout(resolve, RESUME_TIMEOUT_MS))
@@ -158,6 +176,7 @@ export class AudioEngine {
 
   private recalibrate(): void {
     this.tracker.recalibrate()
+    this.bandDynamics.reset()
     this.gate.reset()
   }
 

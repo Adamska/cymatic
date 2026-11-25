@@ -1,5 +1,5 @@
 import { OrbitControls, PerformanceMonitor } from '@react-three/drei'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import type { Mesh } from 'three'
 import { audioEngine } from '../audio/AudioEngine'
@@ -10,6 +10,7 @@ import { PostProcessingStack } from './PostProcessingStack'
 import { QUALITY, useQualityStore, watchBattery } from './quality'
 import { RaySource } from './RaySource'
 import { SculptureCore } from './SculptureCore'
+import { ShockRings } from './ShockRings'
 import { sceneLive, setSceneTarget, stepScene, type SceneLook } from './sceneState'
 import { CameraDirector, CaptureDriver } from './StageDirectors'
 
@@ -21,13 +22,26 @@ function FrameDriver() {
   useFrame((_, delta) => {
     const step = Math.min(delta, MAX_FRAME_DELTA)
     audioEngine.update(step)
-    stepMotion(step, audioEngine.bands, sceneLive.scalars.flow)
+    stepMotion(step, audioEngine.bands, audioEngine.dynamics, sceneLive.scalars.flow)
     stepScene(step, motion.charge)
     if (!announced.current) {
       announced.current = true
       window.requestAnimationFrame(() => window.dispatchEvent(new Event(READY_EVENT)))
     }
   }, -1)
+  return null
+}
+
+/** Keeps the rendered pixel count within the tier budget, whatever the size of the screen. */
+function PixelBudget({ dpr, pixels }: { dpr: number; pixels: number }) {
+  const width = useThree((state) => state.size.width)
+  const height = useThree((state) => state.size.height)
+  const setDpr = useThree((state) => state.setDpr)
+  useEffect(() => {
+    const native = Math.min(dpr, window.devicePixelRatio || 1)
+    const fitting = Math.sqrt(pixels / Math.max(1, width * height))
+    setDpr(Math.max(1, Math.min(native, fitting)))
+  }, [dpr, pixels, width, height, setDpr])
   return null
 }
 
@@ -48,10 +62,12 @@ export function Stage({ look, sweep }: { look: SceneLook; sweep: boolean }) {
     >
       <PerformanceMonitor onIncline={() => step(1)} onDecline={() => step(-1)} flipflops={4} />
       <color attach="background" args={['#05060a']} />
+      <PixelBudget dpr={profile.dpr} pixels={profile.pixels} />
       <FrameDriver />
       <Atmosphere />
       <LightingRig />
       {profile.godRays && <RaySource onReady={setSun} />}
+      <ShockRings />
       <SculptureCore />
       <OrbitControls
         makeDefault

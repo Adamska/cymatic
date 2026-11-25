@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { CubeTexture, IcosahedronGeometry, Vector3, type Mesh } from 'three'
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 import { audioEngine } from '../audio/AudioEngine'
+import { strikePitch } from '../audio/strikeTuning'
 import { useStudioStore } from '../store/useStudioStore'
 import { createCoreMaterial, createCoreUniforms } from './coreMaterial'
 import { knock, motion, strike, strikeState } from './motionState'
@@ -15,10 +16,12 @@ import { cueWave, sceneLive } from './sceneState'
 const CORE_SCALE = 1.22
 const FULL_SIZE_ASPECT = 1.15
 const MIN_FIT = 0.42
-const BREATH_DEPTH = 0.1
-const PULSE_DEPTH = 0.1
+/** The body only swells a little on the kick: the beat mostly travels along the skin as a wave. */
+const KICK_DEPTH = 0.03
+const PULSE_DEPTH = 0.05
+/** A full squash flattens the body by this much and widens it by about half as much. */
+const SQUASH_DEPTH = 0.26
 const CLICK_TOLERANCE_PX = 6
-const BELL_SCALE: readonly number[] = [0, 2, 4, 7, 9, 12, 14, 16, 19]
 
 function createCoreGeometry(subdivisions: number) {
   const faceted = new IcosahedronGeometry(1, subdivisions)
@@ -27,13 +30,6 @@ function createCoreGeometry(subdivisions: number) {
   const welded = mergeVertices(faceted)
   faceted.dispose()
   return welded
-}
-
-/** Pitches a strike on a pentatonic ladder above the cue's drone, higher toward the poles. */
-function bellFrequency(direction: Vector3): number {
-  const step = Math.min(BELL_SCALE.length - 1, Math.floor(Math.abs(direction.y) * BELL_SCALE.length))
-  const rootHz = useStudioStore.getState().directive.synth.rootHz
-  return rootHz * 8 * 2 ** ((BELL_SCALE[step] ?? 0) / 12)
 }
 
 export function SculptureCore() {
@@ -51,13 +47,8 @@ export function SculptureCore() {
   const scratch = useMemo(() => new Vector3(), [])
 
   useEffect(() => () => geometry.dispose(), [geometry])
-  useEffect(
-    () => () => {
-      material.dispose()
-      field.dispose()
-    },
-    [material, field],
-  )
+  useEffect(() => () => material.dispose(), [material])
+  useEffect(() => () => field.dispose(), [field])
 
   const onClick = (event: ThreeEvent<MouseEvent>) => {
     const mesh = meshRef.current
@@ -65,7 +56,9 @@ export function SculptureCore() {
     event.stopPropagation()
     const direction = mesh.worldToLocal(event.point.clone()).normalize()
     strike(direction, 1)
-    void audioEngine.strike(bellFrequency(direction), 0.9)
+    const { directive, source } = useStudioStore.getState()
+    const key = source === 'synth' ? null : audioEngine.dynamics.confidentKey
+    void audioEngine.strike(strikePitch(direction.y, key, directive.synth.rootHz), 0.9)
   }
 
   useFrame((_, delta) => {
@@ -84,14 +77,20 @@ export function SculptureCore() {
     }
 
     uniforms.uTime.value = sceneLive.time
-    uniforms.uSwell.value = motion.low
-    uniforms.uTwist.value = motion.mid
-    uniforms.uRipple.value = motion.high
-    uniforms.uEnergy.value = motion.charge + motion.pulse * 0.9
-    uniforms.uBass.value = bands.bass
-    uniforms.uHigh.value = Math.max(bands.high, motion.high)
+    uniforms.uPitch.value = motion.pitch
+    uniforms.uKickAge.value = motion.kickEvent.age
+    uniforms.uKickForce.value = motion.kickEvent.force
+    uniforms.uSnapAge.value = motion.snapEvent.age
+    uniforms.uSnapForce.value = motion.snapEvent.force
+    const [kick = 0, , , , , air = 0] = motion.bands
+    const flatten = motion.squash * SQUASH_DEPTH
+    const widen = 1 / Math.sqrt(Math.max(0.5, 1 - flatten))
+    uniforms.uStretch.value.set(widen, 1 - flatten, widen)
+    uniforms.uAirGlow.value = Math.min(1.2, Math.max(0, air - 0.2) * 1.4)
+    uniforms.uBass.value = Math.min(1, Math.max(0, motion.low))
+    uniforms.uHigh.value = Math.min(1, Math.max(0, motion.high))
     uniforms.uRms.value = bands.rms
-    uniforms.uShimmer.value = Math.min(1, bands.sparkle * 1.4 + bands.high * 0.25)
+    uniforms.uShimmer.value = Math.min(1, bands.sparkle * 0.6 + Math.max(0, air) * 0.7)
     uniforms.uTurbulence.value = scalars.turbulence
     uniforms.uDisplacement.value = scalars.displacement
     uniforms.uIridescence.value = scalars.iridescence
@@ -101,8 +100,8 @@ export function SculptureCore() {
     uniforms.uStrikeForce.value = strikeState.force
 
     if (mesh) {
-      mesh.rotation.set(motion.pitch, motion.yaw, 0)
-      mesh.scale.setScalar(CORE_SCALE * (1 + Math.max(-0.2, motion.low) * BREATH_DEPTH + motion.pulse * PULSE_DEPTH))
+      mesh.rotation.set(motion.tilt, motion.yaw, 0)
+      mesh.scale.setScalar(CORE_SCALE * (1 + Math.max(-0.3, kick) * KICK_DEPTH + motion.pulse * PULSE_DEPTH))
     }
   })
 

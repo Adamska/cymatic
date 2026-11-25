@@ -4,49 +4,46 @@ export type QualityTier = 0 | 1 | 2
 
 export interface QualityProfile {
   dpr: number
-  multisampling: number
+  /** Most pixels the canvas may render; the pixel ratio drops below `dpr` on large screens. */
+  pixels: number
   subdivisions: number
   particles: number
   sand: number
   /** Re-render the reflection cube map once every this many frames. */
   environmentInterval: number
   environmentResolution: number
-  depthOfField: boolean
   godRays: boolean
 }
 
 export const QUALITY: Record<QualityTier, QualityProfile> = {
   0: {
     dpr: 1,
-    multisampling: 0,
+    pixels: 1_400_000,
     subdivisions: 40,
     particles: 260,
     sand: 2400,
     environmentInterval: 6,
     environmentResolution: 128,
-    depthOfField: false,
     godRays: false,
   },
   1: {
     dpr: 1.35,
-    multisampling: 2,
+    pixels: 2_600_000,
     subdivisions: 64,
     particles: 400,
     sand: 4200,
     environmentInterval: 3,
     environmentResolution: 128,
-    depthOfField: true,
     godRays: false,
   },
   2: {
     dpr: 1.75,
-    multisampling: 4,
+    pixels: 3_800_000,
     subdivisions: 88,
     particles: 520,
     sand: 6400,
     environmentInterval: 2,
     environmentResolution: 256,
-    depthOfField: true,
     godRays: true,
   },
 }

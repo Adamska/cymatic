@@ -2,7 +2,6 @@ import { useFrame } from '@react-three/fiber'
 import {
   Bloom,
   ChromaticAberration,
-  DepthOfField,
   EffectComposer,
   GodRays,
   Noise,
@@ -11,7 +10,7 @@ import {
 } from '@react-three/postprocessing'
 import { BlendFunction, ToneMappingMode, type BloomEffect, type ChromaticAberrationEffect } from 'postprocessing'
 import { useEffect, useMemo, useRef, type ReactElement } from 'react'
-import { HalfFloatType, Vector3, type Mesh } from 'three'
+import { HalfFloatType, type Mesh } from 'three'
 import { audioEngine } from '../audio/AudioEngine'
 import { ImpactBlurEffect } from './ImpactBlurEffect'
 import { motion } from './motionState'
@@ -21,7 +20,11 @@ import { sceneLive } from './sceneState'
 const RESTING_ABERRATION = 0.0005
 const TRANSIENT_ABERRATION = 0.0065
 const IMPACT_BLUR = 0.045
-const FOCUS_TARGET = new Vector3(0, 0, 0)
+/**
+ * Fixed for the session: changing it rebuilds every pass of the composer, a visible hitch.
+ * High density screens are sharp enough without it, and it is the costliest pass there.
+ */
+const MULTISAMPLING = typeof window !== 'undefined' && window.devicePixelRatio >= 1.5 ? 0 : 2
 
 export function PostProcessingStack({ sun }: { sun: Mesh | null }) {
   const bloom = useRef<BloomEffect>(null)
@@ -51,9 +54,6 @@ export function PostProcessingStack({ sun }: { sun: Mesh | null }) {
   if (profile.godRays && sun) {
     effects.push(<GodRays key="rays" sun={sun} samples={32} density={0.88} decay={0.88} weight={0.1} exposure={0.14} clampMax={1} blur />)
   }
-  if (profile.depthOfField) {
-    effects.push(<DepthOfField key="focus" target={FOCUS_TARGET} worldFocusRange={3.2} bokehScale={1.6} />)
-  }
   effects.push(
     <ChromaticAberration key="aberration" ref={aberration} radialModulation modulationOffset={0.18} />,
     <primitive key="impact" object={impactBlur} />,
@@ -63,7 +63,7 @@ export function PostProcessingStack({ sun }: { sun: Mesh | null }) {
   )
 
   return (
-    <EffectComposer key={profile.multisampling} autoClear={false} multisampling={profile.multisampling} frameBufferType={HalfFloatType}>
+    <EffectComposer autoClear={false} multisampling={MULTISAMPLING} frameBufferType={HalfFloatType}>
       {effects}
     </EffectComposer>
   )

@@ -29,7 +29,7 @@ export function RaySource({ onReady }: { onReady: (mesh: Mesh | null) => void })
     camera.getWorldDirection(toward)
     mesh.position.copy(toward).multiplyScalar(DISTANCE)
     const { lights, scalars } = sceneLive
-    const glow = scalars.intensity * (0.22 + audioEngine.bands.rms * 0.35 + motion.pulse * 0.7)
+    const glow = scalars.intensity * (0.22 + audioEngine.bands.rms * 0.25 + motion.intensity * 0.35 + motion.pulse * 0.7)
     mesh.material.color.copy(lights.key).lerp(lights.rim, 0.35).multiplyScalar(glow)
   })
 

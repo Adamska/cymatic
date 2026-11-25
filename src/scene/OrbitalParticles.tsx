@@ -39,14 +39,18 @@ export function OrbitalParticles({ count }: { count: number }) {
   const orbits = useMemo(() => createOrbits(count), [count])
   const scratch = useMemo(() => ({ matrix: new Matrix4(), color: new Color() }), [])
 
-  useFrame(() => {
+  const whirl = useRef(0)
+
+  useFrame((_, delta) => {
     const mesh = meshRef.current
     if (!mesh) return
+    whirl.current += Math.min(delta, 0.1) * (motion.intensity * 0.5 + motion.surge.x * 0.25)
 
     const { spectrum } = audioEngine
     const { matrix, color } = scratch
     const time = sceneLive.time
-    const swell = 1 + motion.low * 0.16 + motion.pulse * 0.12
+    const swell = 1 + motion.low * 0.12 + motion.pulse * 0.12 + motion.intensity * 0.22
+    const glow = 0.6 + motion.intensity * 0.9
     const flutter = Math.max(0, motion.high) * 0.1
     const shimmer = motion.phase.z * 2.3
 
@@ -55,7 +59,7 @@ export function OrbitalParticles({ count }: { count: number }) {
       if (!orbit) continue
 
       const level = (spectrum[orbit.bin] ?? 0) / 255
-      const angle = orbit.phase + time * orbit.speed
+      const angle = orbit.phase + (time + whirl.current) * orbit.speed
       const radius = orbit.radius * (swell + flutter * Math.sin(orbit.phase * 13 + shimmer))
       const planarX = Math.cos(angle) * radius
       const planarZ = Math.sin(angle) * radius
@@ -71,7 +75,7 @@ export function OrbitalParticles({ count }: { count: number }) {
         tiltedZ * cosNode - planarX * sinNode,
       )
       mesh.setMatrixAt(index, matrix)
-      mesh.setColorAt(index, samplePalette(orbit.tone + time * 0.02, color).multiplyScalar(0.6 + level * 2.4))
+      mesh.setColorAt(index, samplePalette(orbit.tone + time * 0.02, color).multiplyScalar(glow + level * 2.4))
     }
 
     mesh.instanceMatrix.needsUpdate = true

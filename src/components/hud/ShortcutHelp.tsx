@@ -3,7 +3,7 @@ import { useUiStore } from '../../store/useUiStore'
 import { GlassPanel } from './GlassPanel'
 
 const TIPS: readonly string[] = [
-  'Click the sculpture to strike it like a bell.',
+  'Click the sculpture to strike it: it rings low and deep, in the key of the music.',
   'Drop any audio file on the page, or import a Deezer playlist from the File menu.',
   'Turn a MIDI knob to map it to the next light rig dial. Keys strike the form.',
 ]

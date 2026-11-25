@@ -15,6 +15,7 @@ uniform vec3 uFromPhase;
 uniform vec3 uWaveOrigin;
 uniform float uWave;
 uniform float uShimmer;
+uniform float uAirGlow;
 uniform samplerCube uEnvMap;
 
 #if NUM_POINT_LIGHTS > 0
@@ -55,6 +56,8 @@ const float SHININESS = 96.0;
 const float SCATTER_DISTORTION = 0.42;
 const float SCATTER_POWER = 3.0;
 const float BASE_REFLECTANCE = 0.06;
+// How much of the raw thin-film rainbow survives; the rest takes the hues of the cue.
+const float RAINBOW_SHARE = 0.25;
 const float PI = 3.14159265359;
 
 float reveal;
@@ -130,14 +133,16 @@ void main() {
   }
   #endif
 
-  float tone = vHeight * 1.5 + fresnel * 0.28 + uTime * 0.015 + uHigh * 0.22;
+  float tone = vHeight * 1.5 + fresnel * 0.28 + uTime * 0.015 + uHigh * 0.08;
   vec3 body = palette(tone);
-  vec3 glow = palette(tone + 0.33 + uHigh * 0.15);
+  vec3 glow = palette(tone + 0.33 + uHigh * 0.06);
 
   float thickness = mix(250.0, 620.0, clamp(0.5 + vHeight * 1.7, 0.0, 1.0)) + fresnel * 110.0 + uHigh * 170.0;
   thickness += sin(vHeight * 38.0 + uTime * 9.0 + vFrequency * 12.0) * uShimmer * 140.0;
-  vec3 film = thinFilm(NdotV, thickness);
-  vec3 sheen = mix(vec3(1.0), film * 1.7, uIridescence);
+  // Thin film tinted by the palette: its light and shade stay, its colors follow the cue.
+  vec3 rawFilm = thinFilm(NdotV, thickness);
+  vec3 film = mix(palette(tone + 0.18) * dot(rawFilm, vec3(0.45)), rawFilm, RAINBOW_SHARE);
+  vec3 sheen = mix(vec3(1.0), film * 1.6, uIridescence * 0.8);
 
   vec3 reflected = (vec4(reflect(-V, N), 0.0) * viewMatrix).xyz;
   vec3 environment = textureCube(uEnvMap, reflected).rgb * uEnvIntensity;
@@ -148,11 +153,16 @@ void main() {
   float occlusion = mix(0.38, 1.0, smoothstep(-0.3, 0.12, vHeight));
 
   vec3 color = body * (0.03 + diffuse) * (1.0 - reflectance) * occlusion;
-  color += glow * scatter * mix(0.35, 1.0, translucency) * (0.5 + uRms * 0.7);
+  color += glow * scatter * mix(0.35, 1.0, translucency) * (0.5 + uRms * 0.3);
   color += (specular + environment * reflectance * mix(0.6, 1.0, occlusion)) * sheen;
-  color += film * fresnel * uIridescence * (0.3 + uHigh * 0.8);
-  color += glow * crest * (uRms * 0.7 + uBass * 0.25);
+  color += film * fresnel * uIridescence * (0.25 + uHigh * 0.35);
+  color += glow * crest * (uRms * 0.3 + uBass * 0.3);
   color += palette(0.15 + vFrequency * 0.7 + uTime * 0.01) * pow(max(vSpectrum, 0.0), 2.2) * (0.12 + fresnel * 0.5);
+
+  // Air: the rim catches a light in the hues of the cue, with a soft sheen gliding around the form.
+  float sweep = smoothstep(0.55, 1.0, sin(dot(normalize(vDirection), vec3(0.62, 0.78, 0.0)) * 3.2 - uTime * 2.6));
+  float rim = pow(1.0 - NdotV, 2.4);
+  color += (film * 1.1 + glow * 0.3) * uAirGlow * (rim + sweep * rim * 1.4 + sweep * 0.05);
 
   color += palette(0.5 + vHeight) * ridge * 3.2;
 
